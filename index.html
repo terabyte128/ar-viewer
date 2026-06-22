@@ -207,6 +207,101 @@
         margin-bottom: 5px;
       }
 
+      .rotation-controls {
+        margin-top: 20px;
+        padding: 20px;
+        background: #f9f9f9;
+        border-radius: 15px;
+      }
+
+      .rotation-controls h3 {
+        margin: 0 0 15px 0;
+        font-size: 16px;
+        color: #333;
+        text-align: center;
+      }
+
+      .rotation-group {
+        margin-bottom: 15px;
+      }
+
+      .rotation-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+        color: #555;
+        font-weight: 600;
+      }
+
+      .rotation-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .rotation-row input[type="range"] {
+        flex: 1;
+        height: 6px;
+        border-radius: 3px;
+        background: #ddd;
+        outline: none;
+        -webkit-appearance: none;
+      }
+
+      .rotation-row input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        cursor: pointer;
+      }
+
+      .rotation-row input[type="range"]::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        cursor: pointer;
+        border: none;
+      }
+
+      .rotation-row span {
+        min-width: 50px;
+        text-align: right;
+        font-size: 13px;
+        color: #666;
+        font-family: 'Monaco', 'Courier New', monospace;
+      }
+
+      .rotation-buttons {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 15px;
+      }
+
+      .rotation-buttons button {
+        padding: 8px 12px;
+        border: none;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        background: #e0e0e0;
+        color: #333;
+        transition: all 0.2s;
+      }
+
+      .rotation-buttons button:hover {
+        background: #d0d0d0;
+      }
+
+      .rotation-buttons button:active {
+        transform: scale(0.95);
+      }
+
       @media (max-width: 600px) {
         .header h1 {
           font-size: 24px;
@@ -272,6 +367,43 @@
           </div>
         </model-viewer>
 
+        <div class="rotation-controls">
+          <h3>Adjust Rotation</h3>
+          
+          <div class="rotation-group">
+            <label>X Axis (Pitch)</label>
+            <div class="rotation-row">
+              <input type="range" id="rotationX" min="-180" max="180" value="0" step="1">
+              <span id="rotationXValue">0°</span>
+            </div>
+          </div>
+
+          <div class="rotation-group">
+            <label>Y Axis (Yaw)</label>
+            <div class="rotation-row">
+              <input type="range" id="rotationY" min="-180" max="180" value="0" step="1">
+              <span id="rotationYValue">0°</span>
+            </div>
+          </div>
+
+          <div class="rotation-group">
+            <label>Z Axis (Roll)</label>
+            <div class="rotation-row">
+              <input type="range" id="rotationZ" min="-180" max="180" value="0" step="1">
+              <span id="rotationZValue">0°</span>
+            </div>
+          </div>
+
+          <div class="rotation-buttons">
+            <button id="rotate90X">Rotate X +90°</button>
+            <button id="rotate90Y">Rotate Y +90°</button>
+            <button id="rotate90Z">Rotate Z +90°</button>
+            <button id="rotateNeg90X">Rotate X -90°</button>
+            <button id="rotateNeg90Y">Rotate Y -90°</button>
+            <button id="rotateNeg90Z">Rotate Z -90°</button>
+          </div>
+        </div>
+
         <div class="controls">
           <button class="btn-primary" id="arButton">View in AR</button>
           <button class="btn-secondary" id="resetButton">Reset View</button>
@@ -289,6 +421,8 @@
       let currentModelUrl = null;
       let currentUSDZUrl = null;
       let currentMesh = null;
+      let baseGeometry = null; // Store original geometry
+      let currentRotation = { x: 0, y: 0, z: 0 };
 
       const fileInput = document.getElementById("stlFile");
       const status = document.getElementById("status");
@@ -297,6 +431,14 @@
       const arButton = document.getElementById("arButton");
       const resetButton = document.getElementById("resetButton");
       const uploadNewButton = document.getElementById("uploadNew");
+
+      // Rotation controls
+      const rotationX = document.getElementById("rotationX");
+      const rotationY = document.getElementById("rotationY");
+      const rotationZ = document.getElementById("rotationZ");
+      const rotationXValue = document.getElementById("rotationXValue");
+      const rotationYValue = document.getElementById("rotationYValue");
+      const rotationZValue = document.getElementById("rotationZValue");
 
       function setStatus(message, type) {
         status.textContent = message;
@@ -309,6 +451,73 @@
 
       function hideViewer() {
         viewerSection.classList.remove("visible");
+      }
+
+      async function updateModelWithRotation() {
+        if (!baseGeometry) return;
+
+        // Clone the base geometry
+        const geometry = baseGeometry.clone();
+        
+        // Apply rotations
+        const euler = new THREE.Euler(
+          THREE.MathUtils.degToRad(currentRotation.x),
+          THREE.MathUtils.degToRad(currentRotation.y),
+          THREE.MathUtils.degToRad(currentRotation.z),
+          'XYZ'
+        );
+        geometry.rotateX(euler.x);
+        geometry.rotateY(euler.y);
+        geometry.rotateZ(euler.z);
+        
+        // Recompute normals after rotation
+        geometry.computeVertexNormals();
+
+        // Create a mesh with material
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x606060,
+          roughness: 0.7,
+          metalness: 0.3,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        currentMesh = mesh;
+
+        // Export to GLB
+        const exporter = new GLTFExporter();
+        
+        exporter.parse(
+          mesh,
+          async (gltf) => {
+            const blob = new Blob([gltf], { type: "model/gltf-binary" });
+            
+            if (currentModelUrl) {
+              URL.revokeObjectURL(currentModelUrl);
+            }
+            
+            currentModelUrl = URL.createObjectURL(blob);
+            modelViewer.src = currentModelUrl;
+
+            // Generate USDZ for iOS
+            try {
+              const usdzExporter = new USDZExporter();
+              const usdzArrayBuffer = await usdzExporter.parse(mesh);
+              const usdzBlob = new Blob([usdzArrayBuffer], { type: "model/vnd.usdz+zip" });
+              
+              if (currentUSDZUrl) {
+                URL.revokeObjectURL(currentUSDZUrl);
+              }
+              
+              currentUSDZUrl = URL.createObjectURL(usdzBlob);
+              modelViewer.setAttribute("ios-src", currentUSDZUrl);
+            } catch (usdzError) {
+              console.warn("USDZ generation failed:", usdzError);
+            }
+          },
+          (error) => {
+            console.error("Export error:", error);
+          },
+          { binary: true }
+        );
       }
 
       fileInput.addEventListener("change", async (event) => {
@@ -335,9 +544,27 @@
 
           const size = new THREE.Vector3();
           geometry.boundingBox.getSize(size);
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const scale = 2 / maxDim;
-          geometry.scale(scale, scale, scale);
+          
+          // Convert from millimeters to meters (divide by 1000)
+          // STL files are typically in mm, but AR expects meters
+          const mmToMeters = 0.001;
+          geometry.scale(mmToMeters, mmToMeters, mmToMeters);
+          
+          // Log the size for debugging
+          const sizeInMeters = size.clone().multiplyScalar(mmToMeters);
+          console.log('Model size in meters:', sizeInMeters.x.toFixed(3), 'x', sizeInMeters.y.toFixed(3), 'x', sizeInMeters.z.toFixed(3));
+
+          // Store the base geometry for rotation adjustments
+          baseGeometry = geometry.clone();
+          
+          // Reset rotation values
+          currentRotation = { x: 0, y: 0, z: 0 };
+          rotationX.value = 0;
+          rotationY.value = 0;
+          rotationZ.value = 0;
+          rotationXValue.textContent = "0°";
+          rotationYValue.textContent = "0°";
+          rotationZValue.textContent = "0°";
 
           // Create a mesh with a basic material
           const material = new THREE.MeshStandardMaterial({
@@ -386,7 +613,7 @@
               }
 
               setStatus(
-                "Model loaded successfully! You can now view it in AR.",
+                "Model loaded successfully! Adjust rotation if needed, then view in AR.",
                 "success",
               );
               showViewer();
@@ -437,6 +664,71 @@
           URL.revokeObjectURL(currentUSDZUrl);
           currentUSDZUrl = null;
         }
+        baseGeometry = null;
+        currentMesh = null;
+        currentRotation = { x: 0, y: 0, z: 0 };
+      });
+
+      // Rotation slider event listeners
+      rotationX.addEventListener("input", (e) => {
+        currentRotation.x = parseFloat(e.target.value);
+        rotationXValue.textContent = currentRotation.x + "°";
+        updateModelWithRotation();
+      });
+
+      rotationY.addEventListener("input", (e) => {
+        currentRotation.y = parseFloat(e.target.value);
+        rotationYValue.textContent = currentRotation.y + "°";
+        updateModelWithRotation();
+      });
+
+      rotationZ.addEventListener("input", (e) => {
+        currentRotation.z = parseFloat(e.target.value);
+        rotationZValue.textContent = currentRotation.z + "°";
+        updateModelWithRotation();
+      });
+
+      // Quick rotation buttons
+      document.getElementById("rotate90X").addEventListener("click", () => {
+        currentRotation.x = (currentRotation.x + 90) % 360;
+        rotationX.value = currentRotation.x;
+        rotationXValue.textContent = currentRotation.x + "°";
+        updateModelWithRotation();
+      });
+
+      document.getElementById("rotateNeg90X").addEventListener("click", () => {
+        currentRotation.x = (currentRotation.x - 90) % 360;
+        rotationX.value = currentRotation.x;
+        rotationXValue.textContent = currentRotation.x + "°";
+        updateModelWithRotation();
+      });
+
+      document.getElementById("rotate90Y").addEventListener("click", () => {
+        currentRotation.y = (currentRotation.y + 90) % 360;
+        rotationY.value = currentRotation.y;
+        rotationYValue.textContent = currentRotation.y + "°";
+        updateModelWithRotation();
+      });
+
+      document.getElementById("rotateNeg90Y").addEventListener("click", () => {
+        currentRotation.y = (currentRotation.y - 90) % 360;
+        rotationY.value = currentRotation.y;
+        rotationYValue.textContent = currentRotation.y + "°";
+        updateModelWithRotation();
+      });
+
+      document.getElementById("rotate90Z").addEventListener("click", () => {
+        currentRotation.z = (currentRotation.z + 90) % 360;
+        rotationZ.value = currentRotation.z;
+        rotationZValue.textContent = currentRotation.z + "°";
+        updateModelWithRotation();
+      });
+
+      document.getElementById("rotateNeg90Z").addEventListener("click", () => {
+        currentRotation.z = (currentRotation.z - 90) % 360;
+        rotationZ.value = currentRotation.z;
+        rotationZValue.textContent = currentRotation.z + "°";
+        updateModelWithRotation();
       });
 
       // Clean up on page unload

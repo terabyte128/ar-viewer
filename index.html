@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>STL AR Viewer</title>
+
+    <!-- Model Viewer -->
+    <script
+      type="module"
+      src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"
+    ></script>
+
+    <!-- Three.js for STL loading and GLB conversion -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+          Cantarell, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+      }
+
+      .container {
+        width: 100%;
+        max-width: 800px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px 20px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 28px;
+        margin-bottom: 8px;
+      }
+
+      .header p {
+        font-size: 14px;
+        opacity: 0.9;
+      }
+
+      .upload-section {
+        padding: 30px 20px;
+        text-align: center;
+      }
+
+      .upload-button {
+        position: relative;
+        display: inline-block;
+      }
+
+      .upload-button input[type="file"] {
+        position: absolute;
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+      }
+
+      .upload-button label {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 16px 32px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 50px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
+      }
+
+      .upload-button label:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+      }
+
+      .upload-button label:active {
+        transform: translateY(0);
+      }
+
+      #status {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 10px;
+        font-size: 14px;
+        min-height: 20px;
+      }
+
+      #status.loading {
+        background: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffc107;
+      }
+
+      #status.success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #28a745;
+      }
+
+      #status.error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #dc3545;
+      }
+
+      .viewer-section {
+        padding: 20px;
+        display: none;
+      }
+
+      .viewer-section.visible {
+        display: block;
+      }
+
+      model-viewer {
+        width: 100%;
+        height: 500px;
+        background-color: #f5f5f5;
+        border-radius: 15px;
+        --progress-bar-color: #667eea;
+      }
+
+      .controls {
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      .controls button {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 25px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+      }
+
+      .btn-secondary {
+        background: #f5f5f5;
+        color: #333;
+      }
+
+      .btn-secondary:hover {
+        background: #e0e0e0;
+      }
+
+      .info-box {
+        margin-top: 20px;
+        padding: 15px;
+        background: #e3f2fd;
+        border-radius: 10px;
+        font-size: 13px;
+        color: #0d47a1;
+        line-height: 1.6;
+      }
+
+      .info-box strong {
+        display: block;
+        margin-bottom: 5px;
+      }
+
+      @media (max-width: 600px) {
+        .header h1 {
+          font-size: 24px;
+        }
+
+        model-viewer {
+          height: 400px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>STL AR Viewer</h1>
+        <p>Upload an STL file to view it in Augmented Reality</p>
+      </div>
+
+      <div class="upload-section">
+        <div class="upload-button">
+          <label for="stlFile">
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            Choose STL File
+          </label>
+          <input type="file" id="stlFile" accept=".stl" />
+        </div>
+        <div id="status"></div>
+
+        <div class="info-box">
+          <strong>How to use:</strong>
+          1. Tap "Choose STL File" and select your STL file<br />
+          2. Wait for the model to load<br />
+          3. Tap "View in AR" to see it in your space<br />
+          4. On iOS, point your camera at a flat surface
+        </div>
+      </div>
+
+      <div class="viewer-section" id="viewerSection">
+        <model-viewer
+          id="modelViewer"
+          ar
+          ar-modes="scene-viewer webxr quick-look"
+          camera-controls
+          touch-action="pan-y"
+          shadow-intensity="1"
+          exposure="1"
+          auto-rotate
+          ios-src=""
+        >
+          <div class="progress-bar" slot="progress-bar">
+            <div class="update-bar"></div>
+          </div>
+        </model-viewer>
+
+        <div class="controls">
+          <button class="btn-primary" id="arButton">View in AR</button>
+          <button class="btn-secondary" id="resetButton">Reset View</button>
+          <button class="btn-secondary" id="uploadNew">Upload New File</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import * as THREE from "three";
+      import { STLLoader } from "three/addons/loaders/STLLoader.js";
+      import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
+
+      let currentModelUrl = null;
+
+      const fileInput = document.getElementById("stlFile");
+      const status = document.getElementById("status");
+      const viewerSection = document.getElementById("viewerSection");
+      const modelViewer = document.getElementById("modelViewer");
+      const arButton = document.getElementById("arButton");
+      const resetButton = document.getElementById("resetButton");
+      const uploadNewButton = document.getElementById("uploadNew");
+
+      function setStatus(message, type) {
+        status.textContent = message;
+        status.className = type;
+      }
+
+      function showViewer() {
+        viewerSection.classList.add("visible");
+      }
+
+      function hideViewer() {
+        viewerSection.classList.remove("visible");
+      }
+
+      fileInput.addEventListener("change", async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        setStatus("Loading STL file...", "loading");
+        hideViewer();
+
+        try {
+          // Read the STL file
+          const arrayBuffer = await file.arrayBuffer();
+
+          setStatus("Converting to AR-compatible format...", "loading");
+
+          // Load STL using Three.js
+          const loader = new STLLoader();
+          const geometry = loader.parse(arrayBuffer);
+
+          // Center and scale the geometry
+          geometry.center();
+          geometry.computeBoundingBox();
+          geometry.computeVertexNormals();
+
+          const size = new THREE.Vector3();
+          geometry.boundingBox.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const scale = 2 / maxDim;
+          geometry.scale(scale, scale, scale);
+
+          // Create a mesh with a basic material
+          const material = new THREE.MeshStandardMaterial({
+            color: 0x606060,
+            roughness: 0.7,
+            metalness: 0.3,
+          });
+          const mesh = new THREE.Mesh(geometry, material);
+
+          // Export to GLB format
+          const exporter = new GLTFExporter();
+
+          exporter.parse(
+            mesh,
+            (gltf) => {
+              // Convert to Blob
+              const blob = new Blob([gltf], { type: "model/gltf-binary" });
+
+              // Revoke previous URL if exists
+              if (currentModelUrl) {
+                URL.revokeObjectURL(currentModelUrl);
+              }
+
+              // Create object URL
+              currentModelUrl = URL.createObjectURL(blob);
+
+              // Set the model
+              modelViewer.src = currentModelUrl;
+              modelViewer.setAttribute("ios-src", currentModelUrl);
+
+              setStatus(
+                "Model loaded successfully! You can now view it in AR.",
+                "success",
+              );
+              showViewer();
+            },
+            (error) => {
+              console.error("Export error:", error);
+              setStatus("Error converting model: " + error.message, "error");
+            },
+            { binary: true },
+          );
+        } catch (error) {
+          console.error("Error loading STL:", error);
+          setStatus("Error loading STL file: " + error.message, "error");
+        }
+      });
+
+      arButton.addEventListener("click", () => {
+        modelViewer.activateAR();
+      });
+
+      resetButton.addEventListener("click", () => {
+        modelViewer.resetTurntableRotation();
+        modelViewer.cameraOrbit =
+          modelViewer.getAttribute("camera-orbit") || "0deg 75deg 105%";
+        modelViewer.fieldOfView = "45deg";
+      });
+
+      uploadNewButton.addEventListener("click", () => {
+        fileInput.value = "";
+        hideViewer();
+        setStatus("", "");
+        if (currentModelUrl) {
+          URL.revokeObjectURL(currentModelUrl);
+          currentModelUrl = null;
+        }
+      });
+
+      // Clean up on page unload
+      window.addEventListener("beforeunload", () => {
+        if (currentModelUrl) {
+          URL.revokeObjectURL(currentModelUrl);
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -259,13 +259,13 @@
         <model-viewer
           id="modelViewer"
           ar
-          ar-modes="scene-viewer webxr quick-look"
+          ar-modes="webxr scene-viewer quick-look"
           camera-controls
           touch-action="pan-y"
           shadow-intensity="1"
           exposure="1"
           auto-rotate
-          ios-src=""
+          xr-environment
         >
           <div class="progress-bar" slot="progress-bar">
             <div class="update-bar"></div>
@@ -284,8 +284,11 @@
       import * as THREE from "three";
       import { STLLoader } from "three/addons/loaders/STLLoader.js";
       import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
+      import { USDZExporter } from "three/addons/exporters/USDZExporter.js";
 
       let currentModelUrl = null;
+      let currentUSDZUrl = null;
+      let currentMesh = null;
 
       const fileInput = document.getElementById("stlFile");
       const status = document.getElementById("status");
@@ -343,13 +346,14 @@
             metalness: 0.3,
           });
           const mesh = new THREE.Mesh(geometry, material);
+          currentMesh = mesh;
 
           // Export to GLB format
           const exporter = new GLTFExporter();
 
           exporter.parse(
             mesh,
-            (gltf) => {
+            async (gltf) => {
               // Convert to Blob
               const blob = new Blob([gltf], { type: "model/gltf-binary" });
 
@@ -363,7 +367,23 @@
 
               // Set the model
               modelViewer.src = currentModelUrl;
-              modelViewer.setAttribute("ios-src", currentModelUrl);
+
+              // Also generate USDZ for iOS Quick Look
+              try {
+                const usdzExporter = new USDZExporter();
+                const usdzArrayBuffer = await usdzExporter.parse(mesh);
+                const usdzBlob = new Blob([usdzArrayBuffer], { type: "model/vnd.usdz+zip" });
+                
+                if (currentUSDZUrl) {
+                  URL.revokeObjectURL(currentUSDZUrl);
+                }
+                
+                currentUSDZUrl = URL.createObjectURL(usdzBlob);
+                modelViewer.setAttribute("ios-src", currentUSDZUrl);
+              } catch (usdzError) {
+                console.warn("USDZ generation failed:", usdzError);
+                // Continue anyway - WebXR might still work
+              }
 
               setStatus(
                 "Model loaded successfully! You can now view it in AR.",
@@ -383,8 +403,19 @@
         }
       });
 
-      arButton.addEventListener("click", () => {
-        modelViewer.activateAR();
+      arButton.addEventListener("click", async () => {
+        if (modelViewer.canActivateAR) {
+          modelViewer.activateAR();
+        } else {
+          setStatus("AR is not available on this device or browser. Make sure you're on an AR-capable device.", "error");
+        }
+      });
+
+      // Listen for AR status changes
+      modelViewer.addEventListener('ar-status', (event) => {
+        if (event.detail.status === 'failed') {
+          setStatus("AR failed to launch. This may be because the model is loaded from a local URL. Try using WebXR instead of Quick Look.", "error");
+        }
       });
 
       resetButton.addEventListener("click", () => {
@@ -402,12 +433,19 @@
           URL.revokeObjectURL(currentModelUrl);
           currentModelUrl = null;
         }
+        if (currentUSDZUrl) {
+          URL.revokeObjectURL(currentUSDZUrl);
+          currentUSDZUrl = null;
+        }
       });
 
       // Clean up on page unload
       window.addEventListener("beforeunload", () => {
         if (currentModelUrl) {
           URL.revokeObjectURL(currentModelUrl);
+        }
+        if (currentUSDZUrl) {
+          URL.revokeObjectURL(currentUSDZUrl);
         }
       });
     </script>
